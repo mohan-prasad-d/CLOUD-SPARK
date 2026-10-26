@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AegisHealth | Emergency Telemetry Platform</title>
+
+  <style>
+    /* Embedded Base & Core Theme Fallbacks (guarantees perfect layout offline or with slow CDN) */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #090D16;
+      color: #E2E8F0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      line-height: 1.5;
+    }
+
+    /* Clinical Dark Palette Variables */
+    :root {
+      --obsidian: #090D16;
+      --obsidian-surface: #0F1626;
+      --cyber: #00F2FE;
+      --crimson: #FF0055;
+      --emerald: #00F5A0;
+      --amber: #F5A623;
+      --slate-800: #1E293B;
+      --slate-900: #0F172A;
+    }
+
+    .glass-card {
+      background: rgba(15, 22, 38, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    }
+
+    .glass-card-crimson {
+      background: rgba(35, 10, 20, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 0, 85, 0.45);
+      box-shadow: 0 0 35px rgba(255, 0, 85, 0.3);
+    }
+
+    .telemetry-num {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    /* SVG Radial Progress */
+    .circle-progress {
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+      transition: stroke-dashoffset 0.3s ease-out;
+    }
+
+    .cyber-grid {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    }
+
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090D16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1E293B;
+      border-radius: 3px;
+    }
+
+    /* Keyframes */
+    @keyframes pulseAlert {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .animate-pulse-alert {
+      animation: pulseAlert 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes radarSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .animate-radar {
+      animation: radarSpin 4s linear infinite;
+    }
+
+    /* Leaflet dark styling */
+    .leaflet-tile {
+      filter: brightness(0.65) invert(1) contrast(3.2) hue-rotate(200deg) saturate(0.35);
+    }
+    .leaflet-container {
+      background-color: #0B0F19 !important;
+    }
+  </style>
+
+  <!-- External CDN Libraries (Tailwind, Lucide, Chart.js, Leaflet) with built-in fallbacks -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    if (window.tailwind) {
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              obsidian: '#090D16',
+              'obsidian-light': '#0F1626',
+              cyber: {
+                DEFAULT: '#00F2FE',
+                glow: 'rgba(0, 242, 254, 0.35)',
+                dim: '#007B83'
+              },
+              crimson: {
+                DEFAULT: '#FF0055',
+                glow: 'rgba(255, 0, 85, 0.4)',
+                dark: '#990033'
+              },
+              emerald: {
+                DEFAULT: '#00F5A0',
+                glow: 'rgba(0, 245, 160, 0.35)'
+              },
+              amber: {
+                DEFAULT: '#F5A623',
+                glow: 'rgba(245, 166, 35, 0.35)'
+              }
+            }
+          }
+        }
+      };
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="min-h-screen cyber-grid flex flex-col antialiased">
+
+  <!-- ========================================== -->
+  <!-- 1. HEADER & LIVE NODE BAR                  -->
+  <!-- ========================================== -->
+  <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-[#090D16]/95 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Brand & Status -->
+      <div class="flex items-center space-x-3">
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-slate-900 border border-[#00F2FE]/40 shadow-[0_0_15px_rgba(0,242,254,0.3)]">
+          <svg class="w-5 h-5 text-[#00F2FE]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <span class="absolute -top-1 -right-1 flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00F5A0] opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-[#00F5A0]"></span>
+          </span>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="text-xl font-bold tracking-tight text-white">AegisHealth</span>
+            <span class="px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase rounded-full bg-[#00F5A0]/15 text-[#00F5A0] border border-[#00F5A0]/30 flex items-center space-x-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-[#00F5A0] animate-pulse"></span>
+              <span>SYSTEM ACTIVE</span>
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Silent Seizure & Solitary Emergency Guardian</p>
+        </div>
+      </div>
+
+      <!-- Live Node Badges -->
+      <div class="hidden md:flex items-center space-x-3 text-xs telemetry-num">
+        <div id="bleStatusBadge" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-300">
+          <svg class="w-3.5 h-3.5 text-[#00F2FE]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7l10 10-5 5V2l5 5L7 17" />
+          </svg>
+          <span>Wear OS BLE: <strong class="text-[#00F5A0] font-semibold" id="bleLatencyText">STABLE (0.8s)</strong></span>
+        </div>
+
+        <div class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-300">
+          <svg class="w-3.5 h-3.5 text-[#00F2FE]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+          </svg>
+          <span>Cloud Engine: <strong class="text-[#00F2FE] font-semibold">FastAPI / PyTorch Ready</strong></span>
+        </div>
+
+        <div class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400">
+          <span class="text-[#00F5A0] font-bold">⚡</span>
+          <span>88%</span>
+        </div>
+      </div>
+
+      <!-- Navigation & View Switcher -->
+      <div class="flex items-center space-x-2">
+        <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 flex items-center text-xs font-medium">
+          <button id="btnNavPatient" onclick="switchView('patient')" class="px-3.5 py-1.5 rounded-lg transition-all duration-200 flex items-center space-x-1.5 bg-[#00F2FE] text-black font-semibold shadow-[0_0_12px_rgba(0,242,254,0.4)]">
+            <span>Patient Telemetry</span>
+          </button>
+          <button id="btnNavResponder" onclick="switchView('responder')" class="px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all duration-200 flex items-center space-x-1.5">
+            <span>First Responder View</span>
+          </button>
+        </div>
+
+        <!-- Arch Specs Drawer Toggle -->
+        <button onclick="toggleSpecsDrawer()" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-[#00F2FE] transition-colors" title="View System Architecture Specs">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Mobile secondary status ticker -->
+    <div class="md:hidden px-4 py-1.5 bg-slate-950/60 border-t border-slate-900 flex items-center justify-between text-[11px] telemetry-num text-slate-400">
+      <span class="flex items-center space-x-1">
+        <span class="w-2 h-2 rounded-full bg-[#00F5A0] inline-block"></span>
+        <span id="bleLatencyMobile">BLE: STABLE (0.8s)</span>
+      </span>
+      <span>PyTorch ML Ready</span>
+      <span class="text-[#00F2FE]">Mohan Prasad (#AEGIS-9921)</span>
+    </div>
+  </header>
+
+
+  <!-- ========================================== -->
+  <!-- 3. INTERACTIVE PITCH CONTROL PANEL         -->
+  <!-- ========================================== -->
+  <section class="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-slate-800/80 px-4 py-2.5">
+    <div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
+      <div class="flex items-center space-x-2 text-xs font-semibold text-slate-300">
+        <div class="p-1.5 rounded-lg bg-[#00F2FE]/10 border border-[#00F2FE]/30 text-[#00F2FE]">
+          ✨
+        </div>
+        <div>
+          <span class="uppercase tracking-wider text-[11px] text-[#00F2FE] font-bold">Pitch Simulation Deck:</span>
+          <p class="text-[11px] text-slate-400 font-normal">Real-time simulation triggers for judges & reviewers</p>
+        </div>
+      </div>
+
+      <!-- Trigger Buttons -->
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Normal Sleep Trigger -->
+        <button onclick="simulateState('normal')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#00F5A0]/10 border border-[#00F5A0]/40 text-[#00F5A0] hover:bg-[#00F5A0]/20 transition-all flex items-center space-x-1.5">
+          <span>🌙 1. Normal Sleep (Baseline)</span>
+        </button>
+
+        <!-- Silent Seizure Trigger -->
+        <button onclick="simulateState('seizure')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#FF0055]/20 border border-[#FF0055] text-white hover:bg-[#FF0055]/30 transition-all flex items-center space-x-1.5 shadow-[0_0_15px_rgba(255,0,85,0.4)] animate-pulse-alert">
+          <span class="text-[#FF0055]">🚨</span>
+          <span>2. Trigger Silent Seizure (89% Breach)</span>
+        </button>
+
+        <!-- BLE Watchdog Loss Trigger -->
+        <button onclick="simulateState('watchdog_loss')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F5A623]/10 border border-[#F5A623]/40 text-[#F5A623] hover:bg-[#F5A623]/20 transition-all flex items-center space-x-1.5">
+          <span>📡 3. BLE Watchdog Loss</span>
+        </button>
+
+        <!-- Manual Sliders Toggle -->
+        <button onclick="toggleSlidersModal()" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center space-x-1" title="Fine-Tune Sensor Inputs">
+          <span>⚙️ Sensors</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Watchdog Alert Banner -->
+  <div id="watchdogBanner" class="hidden bg-[#F5A623]/20 border-b border-[#F5A623]/50 px-4 py-2 text-[#F5A623] text-xs">
+    <div class="flex items-center space-x-2 max-w-7xl mx-auto w-full">
+      <span class="animate-pulse">⚠️</span>
+      <span><strong>CLOUD WATCHDOG HEARTBEAT ALERT:</strong> Wear OS BLE packet loss detected (>2 missed epochs). Attempting automated RF reconnection...</span>
+      <button onclick="simulateState('normal')" class="ml-auto underline hover:text-white font-semibold">Restore BLE Link</button>
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- MAIN CONTAINER WITH VIEW SWITCHING         -->
+  <!-- ========================================== -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- ======================================== -->
+    <!-- VIEW A: PATIENT LIVE MONITOR             -->
+    <!-- ======================================== -->
+    <div id="viewPatient" class="space-y-6">
+
+      <!-- Solitary Patient Profile Card Banner -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-4">
+          <div class="relative">
+            <div class="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-[#00F2FE] font-bold text-lg">
+              MP
+            </div>
+            <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#00F5A0] border-2 border-[#090D16]" title="Active Guarding"></span>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h2 class="text-base sm:text-lg font-bold text-white">Mohan Prasad D</h2>
+              <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Age: 20</span>
+              <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Male</span>
+              <span class="text-xs px-2 py-0.5 rounded bg-[#00F2FE]/10 text-[#00F2FE] border border-[#00F2FE]/30 telemetry-num">ID: #AEGIS-9921</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5 flex items-center space-x-2">
+              <span>Diagnosis: Nocturnal Focal Frontal Lobe Epilepsy</span>
+              <span>•</span>
+              <span class="text-[#00F5A0] font-medium">Solitary Resident Status Verified</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Real-Time Metrics Summary Pills -->
+        <div class="flex flex-wrap items-center gap-3 telemetry-num text-xs">
+          <div class="px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <div class="text-[10px] text-slate-400 uppercase tracking-wider">Baseline HRV (RMSSD)</div>
+            <div class="text-white font-bold text-sm" id="rmssdValue">48 ms <span class="text-[10px] text-[#00F5A0] font-normal">Normal</span></div>
+          </div>
+          <div class="px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <div class="text-[10px] text-slate-400 uppercase tracking-wider">Body Temp / GSR</div>
+            <div class="text-white font-bold text-sm">36.6°C <span class="text-[10px] text-slate-400 font-normal">/ 1.4 µS</span></div>
+          </div>
+          <div class="px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <div class="text-[10px] text-slate-400 uppercase tracking-wider">Sleep Phase</div>
+            <div class="text-[#00F2FE] font-bold text-sm" id="sleepPhaseText">N2 Non-REM</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Telemetry Grid: 4 Clinical Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+
+        <!-- CARD 1: PPG Heart Rate Stream -->
+        <div class="glass-card rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-lg bg-[#FF0055]/10 text-[#FF0055] border border-[#FF0055]/30">
+                ❤️
+              </div>
+              <h3 class="text-sm font-semibold text-slate-200">PPG Heart Stream</h3>
+            </div>
+            <span id="ppgTrendBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-[#00F5A0]/10 text-[#00F5A0] border border-[#00F5A0]/20 flex items-center space-x-1">
+              <span id="ppgTrendText">Resting Sinus</span>
+            </span>
+          </div>
+
+          <!-- Live BPM Readout -->
+          <div class="my-2">
+            <div class="flex items-baseline space-x-2">
+              <span id="liveBpmDisplay" class="text-4xl font-extrabold text-white telemetry-num tracking-tight">72</span>
+              <span class="text-sm text-slate-400 font-medium">BPM</span>
+            </div>
+            <p id="bpmSubtext" class="text-xs text-slate-400 mt-0.5">Baseline: 68 - 76 BPM (Sleep)</p>
+          </div>
+
+          <!-- Mini Realtime Line Waveform Chart Canvas -->
+          <div class="w-full h-24 mt-2 bg-slate-950/70 rounded-xl p-1 border border-slate-800/80 relative overflow-hidden">
+            <canvas id="ppgChartCanvas" class="w-full h-full"></canvas>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-400 mt-2 border-t border-slate-800/80 pt-2 telemetry-num">
+            <span>Filter: 0.5 - 4.0 Hz BPF</span>
+            <span class="text-[#00F2FE]">Confidence: 99.4%</span>
+          </div>
+        </div>
+
+        <!-- CARD 2: 3-Axis Accelerometer Motion Vector -->
+        <div class="glass-card rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-lg bg-[#00F2FE]/10 text-[#00F2FE] border border-[#00F2FE]/30">
+                🧭
+              </div>
+              <h3 class="text-sm font-semibold text-slate-200">3-Axis Motion Vector</h3>
+            </div>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 telemetry-num">100Hz IMU</span>
+          </div>
+
+          <div class="my-2">
+            <div class="flex items-baseline space-x-2">
+              <span id="motionVectorDisplay" class="text-4xl font-extrabold text-white telemetry-num tracking-tight">0.08</span>
+              <span class="text-sm text-slate-400 font-medium">g</span>
+            </div>
+            <p id="motionIntensityText" class="text-xs text-[#00F5A0] font-medium mt-0.5">
+              <span>Sleep Restfulness (Quiet)</span>
+            </p>
+          </div>
+
+          <!-- Visual 3-Axis Bars & Formula -->
+          <div class="space-y-2 mt-2">
+            <div>
+              <div class="flex justify-between text-[10px] text-slate-400 telemetry-num mb-1">
+                <span>Axis X</span>
+                <span id="axisXVal">0.03g</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">
+                <div id="barAxisX" class="bg-[#00F2FE] h-full rounded-full transition-all duration-300" style="width: 8%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-[10px] text-slate-400 telemetry-num mb-1">
+                <span>Axis Y</span>
+                <span id="axisYVal">0.04g</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">
+                <div id="barAxisY" class="bg-[#00F2FE] h-full rounded-full transition-all duration-300" style="width: 10%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-[10px] text-slate-400 telemetry-num mb-1">
+                <span>Axis Z</span>
+                <span id="axisZVal">0.06g</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">
+                <div id="barAxisZ" class="bg-[#00F2FE] h-full rounded-full transition-all duration-300" style="width: 12%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-[10px] text-slate-400 mt-2 border-t border-slate-800/80 pt-2 telemetry-num">
+            <span>VM = &radic;(x&sup2; + y&sup2; + z&sup2;)</span>
+            <span id="jerkMetric" class="text-slate-300">Jerk: 0.01 g/s</span>
+          </div>
+        </div>
+
+        <!-- CARD 3: Stage 2 Acoustic Sleep Stress Monitor -->
+        <div class="glass-card rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-lg bg-[#F5A623]/10 text-[#F5A623] border border-[#F5A623]/30">
+                🎙️
+              </div>
+              <h3 class="text-sm font-semibold text-slate-200">Acoustic Stress Monitor</h3>
+            </div>
+            <span id="acousticStatusPill" class="text-[10px] px-2 py-0.5 rounded-full bg-[#00F5A0]/10 text-[#00F5A0] border border-[#00F5A0]/30">
+              Quiet Ambient
+            </span>
+          </div>
+
+          <div class="my-2">
+            <div class="flex items-baseline space-x-2">
+              <span id="acousticDbDisplay" class="text-4xl font-extrabold text-white telemetry-num tracking-tight">28</span>
+              <span class="text-sm text-slate-400 font-medium">dB SPL</span>
+            </div>
+            <p id="acousticSubtext" class="text-xs text-slate-400 mt-0.5">Frequency Band: 100Hz – 800Hz</p>
+          </div>
+
+          <!-- Dynamic Audio Spectrogram Visualizer Canvas -->
+          <div class="w-full h-24 mt-2 bg-slate-950/80 rounded-xl p-1 border border-slate-800 relative overflow-hidden">
+            <canvas id="spectrogramCanvas" class="w-full h-full"></canvas>
+            <div class="absolute bottom-1 right-2 text-[9px] text-slate-500 font-mono">Formant Tracker</div>
+          </div>
+
+          <div class="flex items-center justify-between text-[10px] text-slate-400 mt-2 border-t border-slate-800/80 pt-2 telemetry-num">
+            <span>Gasping / Stridor: <strong id="stridorStatus" class="text-[#00F5A0]">None</strong></span>
+            <span>THD: 0.04%</span>
+          </div>
+        </div>
+
+        <!-- CARD 4: Unified Confidence Score Gauge -->
+        <div class="glass-card rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden border-[#00F2FE]/30">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-lg bg-[#00F2FE]/15 text-[#00F2FE] border border-[#00F2FE]/40">
+                ⚡
+              </div>
+              <h3 class="text-sm font-semibold text-slate-200">AI Anomaly Confidence</h3>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-[#00F2FE] border border-[#00F2FE]/20 telemetry-num">TCN + IF</span>
+          </div>
+
+          <!-- Radial Circular Gauge Container -->
+          <div class="flex flex-col items-center justify-center my-1 relative">
+            <svg class="w-28 h-28" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#1E293B" stroke-width="8" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255, 0, 85, 0.4)" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="47.5" stroke-linecap="round" />
+              <circle id="radialGaugeCircle" class="circle-progress" cx="50" cy="50" r="42" fill="none" stroke="#00F2FE" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="232" stroke-linecap="round" />
+            </svg>
+            <div class="absolute flex flex-col items-center justify-center text-center">
+              <span id="confidencePercentage" class="text-2xl font-black text-white telemetry-num">12%</span>
+              <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Anomaly Index</span>
+            </div>
+          </div>
+
+          <!-- Gate Notification -->
+          <div class="bg-slate-950/80 rounded-xl p-2.5 border border-slate-800 text-center">
+            <div class="flex items-center justify-between text-[11px] mb-1">
+              <span class="text-slate-400">Emergency Gate:</span>
+              <span class="text-[#FF0055] font-bold telemetry-num">&ge; 82%</span>
+            </div>
+            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden relative">
+              <div id="confidenceLinearBar" class="bg-gradient-to-r from-[#00F5A0] via-[#00F2FE] to-[#FF0055] h-full rounded-full transition-all duration-300" style="width: 12%"></div>
+              <div class="absolute top-0 bottom-0 left-[82%] w-0.5 bg-[#FF0055] shadow-[0_0_4px_#FF0055]"></div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-[10px] text-slate-400 mt-2 border-t border-slate-800/80 pt-2 telemetry-num">
+            <span>Status: <strong id="anomalyStateText" class="text-[#00F5A0]">Sub-Threshold Safe</strong></span>
+            <span>p &lt; 0.001</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Real-Time Telemetry Log Stream -->
+      <div class="glass-card rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center space-x-2">
+            <span class="text-[#00F2FE]">🖥️</span>
+            <h3 class="text-sm font-semibold text-slate-200">Multi-Modal Edge Inference Stream (10s Sliding Windows)</h3>
+          </div>
+          <span class="text-xs text-slate-400 telemetry-num flex items-center space-x-1">
+            <span class="w-2 h-2 rounded-full bg-[#00F5A0] animate-pulse"></span>
+            <span>Continuous Polling</span>
+          </span>
+        </div>
+        
+        <div id="telemetryLogBox" class="h-32 overflow-y-auto space-y-1.5 font-mono text-xs text-slate-300 bg-slate-950/90 rounded-xl p-3 border border-slate-800/80">
+          <div class="text-slate-500">[02:30:10] Epoch #4412: PPG=71bpm, VM=0.06g, Audio=27dB &rarr; Multi-Modal Anomaly Score: 11.4% (PASS)</div>
+          <div class="text-slate-500">[02:30:12] Epoch #4413: PPG=72bpm, VM=0.07g, Audio=28dB &rarr; Multi-Modal Anomaly Score: 12.1% (PASS)</div>
+          <div class="text-slate-500">[02:30:14] Epoch #4414: PPG=72bpm, VM=0.08g, Audio=28dB &rarr; Multi-Modal Anomaly Score: 12.0% (PASS)</div>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ======================================== -->
+    <!-- VIEW B: LEVEL-2 FIRST RESPONDER DASHBOARD -->
+    <!-- ======================================== -->
+    <div id="viewResponder" class="hidden space-y-6">
+
+      <!-- Responder Header Alert Banner -->
+      <div class="glass-card-crimson rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 border border-[#FF0055]/50">
+        <div class="flex items-center space-x-4">
+          <div class="w-12 h-12 rounded-xl bg-[#FF0055]/20 border border-[#FF0055] flex items-center justify-center text-[#FF0055] shadow-[0_0_20px_rgba(255,0,85,0.4)]">
+            <span class="text-2xl animate-pulse">🚑</span>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="px-2.5 py-0.5 rounded-full bg-[#FF0055] text-white text-xs font-black tracking-wider uppercase animate-pulse">LEVEL-2 ESCALATION ACTIVE</span>
+              <span class="text-xs text-slate-300 telemetry-num">DISPATCH REF: #AEGIS-CRASH-7719</span>
+            </div>
+            <h2 class="text-lg font-bold text-white mt-1">Autonomous Dispatch & Incident Telemetry View</h2>
+            <p class="text-xs text-slate-300">Solitary Patient Silent Seizure protocol escalated. Automated Twilio SMS & Voice Links dispatched to primary caregivers.</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button onclick="switchView('patient')" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs text-slate-300 border border-slate-700 flex items-center space-x-1.5 transition-colors">
+            <span>&larr; Return to Live Patient Stream</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Incident Medical Snapshot & Actions Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Column 1: Patient Medical Profile -->
+        <div class="glass-card rounded-2xl p-5 space-y-4">
+          <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+            <span class="text-[#00F2FE]">📋</span>
+            <h3 class="text-sm font-bold text-white">Emergency Medical Identity</h3>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+              <span class="text-slate-400">Full Name</span>
+              <span class="font-bold text-white">Mohan Prasad D</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+              <span class="text-slate-400">Age & Gender</span>
+              <span class="font-semibold text-slate-200">20 yrs | Male</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+              <span class="text-slate-400">Blood Group</span>
+              <span class="px-2 py-0.5 rounded bg-[#FF0055]/20 text-[#FF0055] font-black">O +ve</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+              <span class="text-slate-400">Critical Allergies</span>
+              <span class="text-[#F5A623] font-semibold">Penicillin (Severe)</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+              <span class="text-slate-400">Primary Diagnosis</span>
+              <span class="text-slate-200 text-right">Nocturnal Frontal Lobe Epilepsy (NFLE)</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+              <span class="text-slate-400">Primary Neurologist</span>
+              <span class="text-[#00F2FE] font-medium text-right">Dr. K. Ranganathan (+91 98401 23456)</span>
+            </div>
+            <div class="flex justify-between py-1.5">
+              <span class="text-slate-400">Primary Caregiver</span>
+              <span class="text-slate-200 font-medium text-right">Anita Prasad (Mother) (+91 98402 88771)</span>
+            </div>
+          </div>
+
+          <!-- Quick Action Buttons -->
+          <div class="pt-2 space-y-2">
+            <button onclick="triggerCallPatient()" class="w-full py-2.5 px-3 rounded-xl bg-[#00F2FE] text-black font-bold text-xs flex items-center justify-center space-x-2 hover:bg-[#00F2FE]/90 shadow-[0_0_15px_rgba(0,242,254,0.3)] transition-all">
+              <span>📞 Call Patient Emergency Speakerphone</span>
+            </button>
+            <button onclick="triggerDispatch108()" id="btnDispatch108" class="w-full py-2.5 px-3 rounded-xl bg-[#FF0055] text-white font-bold text-xs flex items-center justify-center space-x-2 hover:bg-[#FF0055]/90 shadow-[0_0_15px_rgba(255,0,85,0.4)] transition-all">
+              <span>🚨 Dispatch 108 Emergency Paramedics</span>
+            </button>
+            <button onclick="copySecureLink()" class="w-full py-2 px-3 rounded-xl bg-slate-800 text-slate-300 hover:text-white font-medium text-xs flex items-center justify-center space-x-2 border border-slate-700 transition-colors">
+              <span id="copyLinkBtnText">🔗 Copy Encrypted Responder Link</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Column 2 & 3: Interactive OpenStreetMap & Incident Trace -->
+        <div class="lg:col-span-2 space-y-6">
+          
+          <!-- Map Card -->
+          <div class="glass-card rounded-2xl p-5">
+            <div class="flex flex-wrap items-center justify-between mb-3 gap-2">
+              <div class="flex items-center space-x-2">
+                <span class="text-[#FF0055] text-lg">📍</span>
+                <div>
+                  <h3 class="text-sm font-bold text-white">Live Patient Geolocation Beacon</h3>
+                  <p class="text-xs text-slate-400">GPS Lock: 13.0827° N, 80.2707° E • Accuracy &plusmn; 4.2m</p>
+                </div>
+              </div>
+              <button onclick="navigateGps()" class="px-3 py-1.5 rounded-lg bg-[#00F5A0]/20 text-[#00F5A0] border border-[#00F5A0]/40 text-xs font-semibold flex items-center space-x-1.5 hover:bg-[#00F5A0]/30 transition-all">
+                <span>🧭 Open GPS Turn-by-Turn</span>
+              </button>
+            </div>
+
+            <!-- Leaflet Container with fallback radar -->
+            <div id="emergencyMapContainer" class="w-full h-72 rounded-xl overflow-hidden border border-slate-800 relative z-10 bg-[#0B0F19]"></div>
+          </div>
+
+          <!-- Incident Freeze-Frame Trace Snapshot -->
+          <div class="glass-card rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center space-x-2">
+                <span class="text-[#00F2FE]">📈</span>
+                <h3 class="text-sm font-semibold text-slate-200">Incident Onset Physiological Trace (Onset vs Post-Ictal)</h3>
+              </div>
+              <span class="text-xs text-[#FF0055] font-mono font-bold">142 BPM Tachycardia Peak</span>
+            </div>
+            
+            <div class="w-full h-36 bg-slate-950/70 rounded-xl p-1 border border-slate-800/80 relative overflow-hidden">
+              <canvas id="incidentTraceCanvas" class="w-full h-full"></canvas>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-800/80 text-center text-xs telemetry-num">
+              <div>
+                <span class="text-slate-400 block text-[10px]">PRE-ICTAL</span>
+                <span class="text-white font-bold">72 BPM / 0.08g</span>
+              </div>
+              <div>
+                <span class="text-[#FF0055] block text-[10px] font-bold">ICTAL CLONIC SPASM</span>
+                <span class="text-[#FF0055] font-bold">142 BPM / 2.45g</span>
+              </div>
+              <div>
+                <span class="text-[#F5A623] block text-[10px]">POST-ICTAL IMMOBILITY</span>
+                <span class="text-[#F5A623] font-bold">118 BPM / 0.02g</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+
+  <!-- ========================================== -->
+  <!-- 4. LEVEL-1 EMERGENCY MODAL (30-SECOND COUNTDOWN) -->
+  <!-- ========================================== -->
+  <div id="emergencyModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-[#090D16]/95 backdrop-blur-2xl">
+    <div class="absolute inset-0 border-8 border-[#FF0055] animate-pulse pointer-events-none"></div>
+
+    <div class="glass-card-crimson max-w-lg w-full rounded-3xl p-6 sm:p-8 text-center relative z-10 space-y-6 shadow-[0_0_60px_rgba(255,0,85,0.4)]">
+      
+      <!-- Headline & Alarm Icon -->
+      <div class="space-y-2">
+        <div class="w-16 h-16 mx-auto rounded-2xl bg-[#FF0055]/20 border-2 border-[#FF0055] flex items-center justify-center text-[#FF0055] shadow-[0_0_25px_#FF0055] text-3xl animate-bounce">
+          ⚠️
+        </div>
+        <span class="px-3 py-1 rounded-full bg-[#FF0055] text-white text-xs font-black tracking-widest uppercase">
+          PRIORITY 1 CRITICAL BREACH
+        </span>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          SEIZURE / HEALTH CRASH DETECTED
+        </h2>
+        <p class="text-xs sm:text-sm text-slate-300">
+          Wearable telemetry indicates high-frequency clonic motion & tachycardia spike (Score: <strong class="text-[#FF0055] telemetry-num" id="modalBreachScore">89%</strong>).
+        </p>
+      </div>
+
+      <!-- Countdown Clock with Animated SVG Ring -->
+      <div class="flex flex-col items-center justify-center relative my-4">
+        <svg class="w-40 h-40" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="52" fill="none" stroke="#2D0B18" stroke-width="8" />
+          <circle id="countdownRing" class="circle-progress" cx="60" cy="60" r="52" fill="none" stroke="#FF0055" stroke-width="8" stroke-dasharray="326.7" stroke-dashoffset="0" stroke-linecap="round" />
+        </svg>
+        <div class="absolute flex flex-col items-center justify-center">
+          <span id="countdownNumber" class="text-5xl font-black text-white telemetry-num tracking-tighter">30</span>
+          <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Seconds Left</span>
+        </div>
+      </div>
+
+      <!-- Vibration & Audio Visualizer Warning -->
+      <div class="flex items-center justify-center space-x-2 text-xs text-[#F5A623] font-mono bg-slate-950/80 py-2 px-3 rounded-xl border border-slate-800">
+        <span class="text-[#FF0055] animate-pulse">🔊</span>
+        <span>Sound Alarm & Watch Haptics Blaring</span>
+      </div>
+
+      <!-- PRIMARY ACTION BUTTON: CANCEL ALARM -->
+      <div class="space-y-3">
+        <button onclick="cancelEmergency()" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#00F5A0] via-[#00F5A0] to-teal-400 text-black font-extrabold text-base sm:text-lg tracking-wide shadow-[0_0_30px_rgba(0,245,160,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center space-x-3">
+          <span>✓ CANCEL ALARM (I'M OKAY)</span>
+        </button>
+
+        <p class="text-[11px] text-slate-400">
+          Tapping cancels emergency dispatch, resets confidence score, and logs this instance as <span class="text-[#00F2FE]">"False Positive Retraining Data"</span> in Supabase.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- 6. SYSTEM ARCHITECTURE SPECS DRAWER        -->
+  <!-- ========================================== -->
+  <section id="specsDrawer" class="border-t border-slate-800 bg-[#0F1626]/95 backdrop-blur-xl transition-all duration-300">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      
+      <div class="flex items-center justify-between cursor-pointer" onclick="toggleSpecsDrawer()">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 rounded-xl bg-[#00F2FE]/15 border border-[#00F2FE]/30 text-[#00F2FE]">
+            📐
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center space-x-2">
+              <span>System Architecture & 3-Tier Tech Stack</span>
+              <span class="text-xs px-2 py-0.5 rounded bg-[#00F2FE]/20 text-[#00F2FE] font-normal">Technical Proof for Judges</span>
+            </h3>
+            <p class="text-xs text-slate-400">End-to-end resilient architecture for silent nocturnal seizure detection</p>
+          </div>
+        </div>
+
+        <button class="text-slate-400 hover:text-white p-1 text-sm font-bold">
+          <span id="specsChevron">▲</span>
+        </button>
+      </div>
+
+      <div id="specsContent" class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        <!-- Tier 1: Wearable -->
+        <div class="glass-card rounded-xl p-4 border-l-4 border-l-[#00F2FE]">
+          <div class="flex items-center space-x-2 text-[#00F2FE] mb-2 font-mono text-xs font-bold uppercase tracking-wider">
+            <span>⌚ Tier 1: Wearable Device</span>
+          </div>
+          <h4 class="text-sm font-bold text-white">Kotlin Wear OS BLE Service</h4>
+          <ul class="text-xs text-slate-300 mt-2 space-y-1.5 list-disc list-inside">
+            <li>Foreground Android Service with WakeLock protection</li>
+            <li>Continuous 1Hz PPG Photoplethysmography sensor pipeline</li>
+            <li>100Hz 3-axis Accelerometer with real-time vector magnitude $VM$</li>
+            <li>Low-power BLE GATT server with zero packet drop MTU buffering</li>
+            <li>On-watch circular haptic feedback during Level-1 countdown</li>
+          </ul>
+        </div>
+
+        <!-- Tier 2: Gateway -->
+        <div class="glass-card rounded-xl p-4 border-l-4 border-l-[#00F5A0]">
+          <div class="flex items-center space-x-2 text-[#00F5A0] mb-2 font-mono text-xs font-bold uppercase tracking-wider">
+            <span>📱 Tier 2: Mobile Gateway</span>
+          </div>
+          <h4 class="text-sm font-bold text-white">Edge ML Filter & Countdown UI</h4>
+          <ul class="text-xs text-slate-300 mt-2 space-y-1.5 list-disc list-inside">
+            <li>Flutter / Kotlin Android Gateway acting as central receiver</li>
+            <li>Quantized TensorFlow Lite (TFLite) 10-second sliding window model</li>
+            <li>30-second fail-safe local countdown timer before cloud dispatch</li>
+            <li>Bypasses "Do Not Disturb" (DND) with Android AudioAttributes FLAG_AUDIBILITY_ENFORCED</li>
+            <li>Automatic fall-back to cellular SMS if WiFi drops</li>
+          </ul>
+        </div>
+
+        <!-- Tier 3: Cloud -->
+        <div class="glass-card rounded-xl p-4 border-l-4 border-l-[#FF0055]">
+          <div class="flex items-center space-x-2 text-[#FF0055] mb-2 font-mono text-xs font-bold uppercase tracking-wider">
+            <span>☁️ Tier 3: Cloud Dispatch</span>
+          </div>
+          <h4 class="text-sm font-bold text-white">FastAPI & PyTorch Engine</h4>
+          <ul class="text-xs text-slate-300 mt-2 space-y-1.5 list-disc list-inside">
+            <li>PyTorch Isolation Forest + Temporal Convolutional Network (TCN)</li>
+            <li>Supabase PostgreSQL database with PostGIS for geofenced responders</li>
+            <li>Twilio Voice & SMS webhooks delivering dynamic incident tokens</li>
+            <li>Automated retraining pipeline on user "Cancel Alarm" false positives</li>
+            <li>Sub-second cloud latency (42ms typical REST endpoint)</li>
+          </ul>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Manual Sliders Modal for live granular adjustments -->
+  <div id="slidersModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-[#090D16]/80 backdrop-blur-md">
+    <div class="glass-card max-w-md w-full rounded-2xl p-6 space-y-4 border border-slate-700">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <span>⚙️ Fine-Tune Simulation Parameters</span>
+        </h3>
+        <button onclick="toggleSlidersModal()" class="text-slate-400 hover:text-white font-bold">
+          ✕
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <div class="flex justify-between text-slate-300 mb-1">
+            <span>Simulated PPG (Heart Rate):</span>
+            <span id="sliderBpmVal" class="font-mono text-[#00F2FE] font-bold">72 BPM</span>
+          </div>
+          <input type="range" id="sliderBpm" min="50" max="180" value="72" oninput="onManualSliderChange()" class="w-full accent-[#00F2FE]">
+        </div>
+
+        <div>
+          <div class="flex justify-between text-slate-300 mb-1">
+            <span>Motion Vector Magnitude (VM):</span>
+            <span id="sliderVmVal" class="font-mono text-[#00F2FE] font-bold">0.08 g</span>
+          </div>
+          <input type="range" id="sliderVm" min="0" max="350" value="8" oninput="onManualSliderChange()" class="w-full accent-[#00F2FE]">
+        </div>
+
+        <div>
+          <div class="flex justify-between text-slate-300 mb-1">
+            <span>Acoustic Amplitude (dB):</span>
+            <span id="sliderAudioVal" class="font-mono text-[#00F2FE] font-bold">28 dB</span>
+          </div>
+          <input type="range" id="sliderAudio" min="20" max="90" value="28" oninput="onManualSliderChange()" class="w-full accent-[#00F2FE]">
+        </div>
+
+        <div>
+          <div class="flex justify-between text-slate-300 mb-1">
+            <span>Anomaly Confidence Score:</span>
+            <span id="sliderConfVal" class="font-mono text-[#00F2FE] font-bold">12 %</span>
+          </div>
+          <input type="range" id="sliderConf" min="0" max="100" value="12" oninput="onManualSliderChange()" class="w-full accent-[#00F2FE]">
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button onclick="toggleSlidersModal()" class="px-4 py-2 rounded-xl bg-[#00F2FE] text-black font-bold text-xs">Done</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Toast Notification element -->
+  <div id="toastNotification" class="fixed bottom-6 right-6 z-50 hidden glass-card rounded-xl px-4 py-3 border border-[#00F2FE]/40 text-xs text-white shadow-2xl flex items-center space-x-2">
+    <span id="toastIcon">ℹ️</span>
+    <span id="toastMessage">Notification</span>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- JAVASCRIPT STATE ENGINE & SIMULATOR        -->
+  <!-- ========================================== -->
+  <script>
+    // System State
+    const state = {
+      view: 'patient',
+      simMode: 'normal',
+      bpm: 72,
+      targetBpm: 72,
+      motionVm: 0.08,
+      motionX: 0.03,
+      motionY: 0.04,
+      motionZ: 0.06,
+      audioDb: 28,
+      confidence: 12,
+      targetConfidence: 12,
+      emergencyActive: false,
+      countdownRemaining: 30,
+      countdownInterval: null,
+      bleConnected: true,
+      audioSynthCtx: null,
+      historyData: [70, 71, 72, 70, 72, 73, 71, 72, 72, 71, 73, 72, 71, 72, 73, 72]
+    };
+
+    let ppgChartInstance = null;
+    let incidentChartInstance = null;
+    let leafletMap = null;
+
+    // Direct Canvas Fallback for PPG Waveform (smooth 60fps, zero dependency)
+    function drawDirectPpgCanvas() {
+      const canvas = document.getElementById('ppgChartCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const w = canvas.parentElement?.clientWidth || 240;
+      const h = canvas.parentElement?.clientHeight || 90;
+      canvas.width = w;
+      canvas.height = h;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid background lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.lineWidth = 1;
+      for (let y = 15; y < h; y += 20) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Draw Waveform
+      const points = state.historyData;
+      const step = w / (points.length - 1);
+
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const bpm = points[i];
+        const normalized = (bpm - 50) / 110;
+        const y = h - 10 - (normalized * (h - 20));
+        const x = i * step;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else {
+          const prevX = (i - 1) * step;
+          const prevY = h - 10 - (((points[i - 1] - 50) / 110) * (h - 20));
+          const cx = (prevX + x) / 2;
+          ctx.bezierCurveTo(cx, prevY, cx, y, x, y);
+        }
+      }
+
+      // Line style
+      ctx.strokeStyle = state.simMode === 'seizure' ? '#FF0055' : '#00F2FE';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      // Gradient Fill Under Wave
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      if (state.simMode === 'seizure') {
+        grad.addColorStop(0, 'rgba(255, 0, 85, 0.25)');
+        grad.addColorStop(1, 'rgba(255, 0, 85, 0.0)');
+      } else {
+        grad.addColorStop(0, 'rgba(0, 242, 254, 0.25)');
+        grad.addColorStop(1, 'rgba(0, 242, 254, 0.0)');
+      }
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Pulsing current value point
+      const lastX = w;
+      const lastNorm = (points[points.length - 1] - 50) / 110;
+      const lastY = h - 10 - (lastNorm * (h - 20));
+      ctx.beginPath();
+      ctx.arc(lastX - 2, lastY, 4, 0, Math.PI * 2);
+      ctx.fillStyle = state.simMode === 'seizure' ? '#FF0055' : '#00F5A0';
+      ctx.fill();
+    }
+
+    // Direct Canvas Fallback for Incident Trace
+    function drawDirectIncidentCanvas() {
+      const canvas = document.getElementById('incidentTraceCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const w = canvas.parentElement?.clientWidth || 400;
+      const h = canvas.parentElement?.clientHeight || 140;
+      canvas.width = w;
+      canvas.height = h;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      for (let y = 20; y < h; y += 30) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      const bpmPoints = [72, 71, 73, 72, 75, 88, 142, 138, 130, 124, 118, 115];
+      const motionPoints = [0.08, 0.07, 0.08, 0.09, 0.45, 1.80, 2.45, 1.90, 0.05, 0.02, 0.02, 0.01];
+      const step = w / (bpmPoints.length - 1);
+
+      // 1. Draw BPM Spike (Red)
+      ctx.beginPath();
+      for (let i = 0; i < bpmPoints.length; i++) {
+        const x = i * step;
+        const y = h - 15 - (((bpmPoints[i] - 50) / 110) * (h - 30));
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = '#FF0055';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // 2. Draw Motion Spike (Cyan Dashed)
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      for (let i = 0; i < motionPoints.length; i++) {
+        const x = i * step;
+        const y = h - 15 - ((motionPoints[i] / 3.0) * (h - 30));
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = '#00F2FE';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Onset vertical marker
+      const onsetX = 6 * step;
+      ctx.strokeStyle = 'rgba(255, 0, 85, 0.4)';
+      ctx.beginPath();
+      ctx.moveTo(onsetX, 0);
+      ctx.lineTo(onsetX, h);
+      ctx.stroke();
+
+      ctx.fillStyle = '#FF0055';
+      ctx.font = '10px ui-monospace, monospace';
+      ctx.fillText('ONSET 142 BPM', onsetX + 4, 18);
+    }
+
+    // Audio Alarm Synthesizer via Web Audio API
+    function playAlarmTone() {
+      try {
+        if (!state.audioSynthCtx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) state.audioSynthCtx = new AudioContext();
+        }
+        if (!state.audioSynthCtx) return;
+        if (state.audioSynthCtx.state === 'suspended') {
+          state.audioSynthCtx.resume();
+        }
+
+        const osc = state.audioSynthCtx.createOscillator();
+        const gain = state.audioSynthCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, state.audioSynthCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1760, state.audioSynthCtx.currentTime + 0.15);
+
+        gain.gain.setValueAtTime(0.3, state.audioSynthCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, state.audioSynthCtx.currentTime + 0.25);
+
+        osc.connect(gain);
+        gain.connect(state.audioSynthCtx.destination);
+        osc.start();
+        osc.stop(state.audioSynthCtx.currentTime + 0.25);
+
+        if (window.AndroidBridge && typeof window.AndroidBridge.vibrate === 'function') {
+          window.AndroidBridge.vibrate(250);
+        } else if (navigator.vibrate) {
+          navigator.vibrate(250);
+        }
+      } catch (e) {
+        // Audio error caught gracefully
+      }
+    }
+
+    // Initialize Leaflet Map or Fallback Tactical Radar
+    function initMap() {
+      const container = document.getElementById('emergencyMapContainer');
+      if (!container) return;
+
+      if (window.L && typeof window.L.map === 'function' && !leafletMap) {
+        try {
+          const lat = 13.0827;
+          const lng = 80.2707;
+
+          leafletMap = L.map('emergencyMapContainer', {
+            center: [lat, lng],
+            zoom: 16,
+            zoomControl: true
+          });
+
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+          }).addTo(leafletMap);
+
+          const pulsingIcon = L.divIcon({
+            className: 'custom-beacon',
+            html: `
+              <div style="position:relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center;">
+                <div style="position:absolute; width:100%; height:100%; border-radius:50%; background:#FF0055; opacity:0.6; animation:pulseAlert 1s infinite;"></div>
+                <div style="position:relative; width:14px; height:14px; border-radius:50%; background:#FF0055; border:2px solid white; box-shadow:0 0 10px #FF0055;"></div>
+              </div>
+            `,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+          });
+
+          L.marker([lat, lng], { icon: pulsingIcon }).addTo(leafletMap)
+            .bindPopup(`<strong>#AEGIS-9921 PATIENT BEACON</strong><br>Mohan Prasad D (Age: 20)<br>Apt 4B, Solitary Residence, Chennai`)
+            .openPopup();
+
+          L.circle([lat, lng], {
+            color: '#00F2FE',
+            fillColor: '#00F2FE',
+            fillOpacity: 0.1,
+            radius: 80
+          }).addTo(leafletMap);
+          return;
+        } catch (e) {
+          console.warn("Leaflet map init fallback", e);
+        }
+      }
+
+      container.innerHTML = `
+        <div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; background:#0B0F19;">
+          <div style="position:absolute; width:180px; height:180px; border-radius:50%; border:1px solid rgba(0,242,254,0.3); display:flex; align-items:center; justify-content:center;">
+            <div style="width:100px; height:100px; border-radius:50%; border:1px solid rgba(0,242,254,0.2); display:flex; align-items:center; justify-content:center;">
+              <div style="width:16px; height:16px; border-radius:50%; background:#FF0055; box-shadow:0 0 15px #FF0055;" class="animate-pulse-alert"></div>
+            </div>
+          </div>
+          <div style="position:relative; z-index:2; text-align:center; padding:10px; background:rgba(9,13,22,0.85); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+            <div style="color:#FF0055; font-weight:bold; font-size:12px;">EMERGENCY BEACON ACTIVE</div>
+            <div style="color:white; font-size:11px; font-family:monospace;">13.0827° N, 80.2707° E</div>
+            <div style="color:#00F2FE; font-size:10px;">Solitary Patient Res: Apt 4B, Chennai</div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Canvas Spectrogram Animation
+    function drawSpectrogram() {
+      const canvas = document.getElementById('spectrogramCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const w = canvas.parentElement?.clientWidth || 240;
+      const h = canvas.parentElement?.clientHeight || 96;
+      canvas.width = w;
+      canvas.height = h;
+
+      const bars = 22;
+      const barWidth = w / bars;
+
+      ctx.clearRect(0, 0, w, h);
+
+      for (let i = 0; i < bars; i++) {
+        let baseHeight = state.audioDb * 0.8;
+        if (state.simMode === 'seizure' && (i >= 8 && i <= 15)) {
+          baseHeight = (h * 0.85) + (Math.random() * 15 - 7);
+        } else {
+          baseHeight = (baseHeight * (0.4 + Math.random() * 0.6)) + (Math.sin(Date.now() / 300 + i) * 8);
+        }
+        baseHeight = Math.max(6, Math.min(h - 4, baseHeight));
+
+        const x = i * barWidth;
+        const y = h - baseHeight;
+
+        const grad = ctx.createLinearGradient(0, h, 0, 0);
+        if (state.simMode === 'seizure') {
+          grad.addColorStop(0, '#FF0055');
+          grad.addColorStop(1, '#FF7597');
+        } else {
+          grad.addColorStop(0, '#00F2FE');
+          grad.addColorStop(0.7, '#00F5A0');
+          grad.addColorStop(1, '#FFFFFF');
+        }
+
+        ctx.fillStyle = grad;
+        ctx.fillRect(x + 2, y, barWidth - 4, baseHeight);
+      }
+    }
+
+    function switchView(viewName) {
+      state.view = viewName;
+      const viewPatient = document.getElementById('viewPatient');
+      const viewResponder = document.getElementById('viewResponder');
+      const btnNavPatient = document.getElementById('btnNavPatient');
+      const btnNavResponder = document.getElementById('btnNavResponder');
+
+      if (viewName === 'patient') {
+        viewPatient.classList.remove('hidden');
+        viewResponder.classList.add('hidden');
+
+        btnNavPatient.className = 'px-3.5 py-1.5 rounded-lg transition-all duration-200 flex items-center space-x-1.5 bg-[#00F2FE] text-black font-semibold shadow-[0_0_12px_rgba(0,242,254,0.4)]';
+        btnNavResponder.className = 'px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all duration-200 flex items-center space-x-1.5';
+      } else {
+        viewPatient.classList.add('hidden');
+        viewResponder.classList.remove('hidden');
+
+        btnNavResponder.className = 'px-3.5 py-1.5 rounded-lg transition-all duration-200 flex items-center space-x-1.5 bg-[#FF0055] text-white font-semibold shadow-[0_0_12px_rgba(255,0,85,0.4)]';
+        btnNavPatient.className = 'px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all duration-200 flex items-center space-x-1.5';
+
+        setTimeout(() => {
+          initMap();
+          drawDirectIncidentCanvas();
+        }, 80);
+      }
+    }
+
+    function simulateState(mode) {
+      state.simMode = mode;
+      const watchdogBanner = document.getElementById('watchdogBanner');
+      const bleLatencyText = document.getElementById('bleLatencyText');
+      const bleStatusBadge = document.getElementById('bleStatusBadge');
+
+      if (mode === 'normal') {
+        state.targetBpm = 72;
+        state.motionVm = 0.08;
+        state.motionX = 0.03;
+        state.motionY = 0.04;
+        state.motionZ = 0.06;
+        state.audioDb = 28;
+        state.targetConfidence = 12;
+        state.bleConnected = true;
+
+        watchdogBanner.classList.add('hidden');
+        bleLatencyText.innerText = 'STABLE (0.8s)';
+        bleLatencyText.className = 'text-[#00F5A0] font-semibold';
+        bleStatusBadge.className = 'flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-300';
+
+        document.getElementById('acousticStatusPill').innerText = 'Quiet Ambient';
+        document.getElementById('acousticStatusPill').className = 'text-[10px] px-2 py-0.5 rounded-full bg-[#00F5A0]/10 text-[#00F5A0] border border-[#00F5A0]/30';
+        document.getElementById('stridorStatus').innerText = 'None';
+        document.getElementById('stridorStatus').className = 'text-[#00F5A0]';
+
+        document.getElementById('motionIntensityText').innerHTML = `<span>Sleep Restfulness (Quiet)</span>`;
+        document.getElementById('motionIntensityText').className = 'text-xs text-[#00F5A0] font-medium mt-0.5';
+
+        document.getElementById('rmssdValue').innerHTML = `48 ms <span class="text-[10px] text-[#00F5A0] font-normal">Normal</span>`;
+        document.getElementById('sleepPhaseText').innerText = 'N2 Non-REM';
+
+        closeEmergencyModal();
+        addTelemetryLog("Simulated Normal Sleep: PPG ~72 BPM, VM 0.08g, Confidence 12%.");
+        showToast("System State: Normal Sleep Baseline");
+
+      } else if (mode === 'seizure') {
+        state.targetBpm = 142;
+        state.motionVm = 2.45;
+        state.motionX = 1.15;
+        state.motionY = 1.48;
+        state.motionZ = 1.55;
+        state.audioDb = 68;
+        state.targetConfidence = 89;
+        state.bleConnected = true;
+
+        watchdogBanner.classList.add('hidden');
+        document.getElementById('acousticStatusPill').innerText = 'Ictal Stridor / Gasp Detected';
+        document.getElementById('acousticStatusPill').className = 'text-[10px] px-2 py-0.5 rounded-full bg-[#FF0055]/20 text-[#FF0055] border border-[#FF0055]/40 animate-pulse-alert';
+        document.getElementById('stridorStatus').innerText = 'BREACH (450Hz Spike)';
+        document.getElementById('stridorStatus').className = 'text-[#FF0055] font-bold';
+
+        document.getElementById('motionIntensityText').innerHTML = `<span>Clonic Tremor Spasm (High Turbulence)</span>`;
+        document.getElementById('motionIntensityText').className = 'text-xs text-[#FF0055] font-bold mt-0.5';
+
+        document.getElementById('rmssdValue').innerHTML = `9 ms <span class="text-[10px] text-[#FF0055] font-bold">Severe HRV Suppression</span>`;
+        document.getElementById('sleepPhaseText').innerText = 'Arousal / Ictal Crash';
+
+        addTelemetryLog("CRITICAL: Tachycardia spike 142 BPM, VM 2.45g clonic spasms. AI Confidence = 89% (>82% Gate). Level-1 Alert!");
+        showToast("ALERT: Seizure Anomaly Breach (89%) Detected!", "crimson");
+
+        triggerEmergencyAlert();
+
+      } else if (mode === 'watchdog_loss') {
+        state.bleConnected = false;
+        watchdogBanner.classList.remove('hidden');
+        bleLatencyText.innerText = 'DROPPED (Packet Timeout)';
+        bleLatencyText.className = 'text-[#F5A623] font-bold animate-pulse';
+        bleStatusBadge.className = 'flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-[#F5A623]/10 border border-[#F5A623]/40 text-[#F5A623]';
+
+        addTelemetryLog("WARNING: Wear OS BLE watchdog loss detected. Stalled queue. Cloud Watchdog Heartbeat activated.");
+        showToast("Watchdog Alert: Wear OS BLE Heartbeat Lost", "amber");
+      }
+    }
+
+    function triggerEmergencyAlert() {
+      state.emergencyActive = true;
+      state.countdownRemaining = 30;
+
+      const modal = document.getElementById('emergencyModal');
+      const breachScore = document.getElementById('modalBreachScore');
+      breachScore.innerText = `${Math.round(state.confidence)}%`;
+      modal.classList.remove('hidden');
+
+      if (state.countdownInterval) clearInterval(state.countdownInterval);
+      updateCountdownDisplay();
+
+      state.countdownInterval = setInterval(() => {
+        state.countdownRemaining--;
+        updateCountdownDisplay();
+        playAlarmTone();
+
+        if (state.countdownRemaining <= 0) {
+          clearInterval(state.countdownInterval);
+          autoEscalateToLevel2();
+        }
+      }, 1000);
+    }
+
+    function updateCountdownDisplay() {
+      const numberEl = document.getElementById('countdownNumber');
+      const ringEl = document.getElementById('countdownRing');
+      if (numberEl) numberEl.innerText = state.countdownRemaining;
+
+      if (ringEl) {
+        const total = 326.7;
+        const progress = state.countdownRemaining / 30;
+        const offset = total - (progress * total);
+        ringEl.style.strokeDashoffset = offset;
+      }
+    }
+
+    function cancelEmergency() {
+      if (state.countdownInterval) clearInterval(state.countdownInterval);
+      state.emergencyActive = false;
+      closeEmergencyModal();
+
+      addTelemetryLog("User tapped CANCEL ALARM: Dispatch aborted. Logged as 'False Positive Retraining Data' to Supabase.");
+      showToast("Alarm Cancelled: Retraining Feedback Sent", "emerald");
+
+      simulateState('normal');
+    }
+
+    function closeEmergencyModal() {
+      const modal = document.getElementById('emergencyModal');
+      modal.classList.add('hidden');
+      if (state.countdownInterval) clearInterval(state.countdownInterval);
+    }
+
+    function autoEscalateToLevel2() {
+      closeEmergencyModal();
+      showToast("Level-1 Timed Out: Dispatched Twilio SMS & Calls!", "crimson");
+      addTelemetryLog("TIMEOUT: 30s cancellation window expired. Dispatching automated 108 emergency calls and SMS with dynamic URL.");
+      switchView('responder');
+    }
+
+    function triggerCallPatient() {
+      showToast("Calling Patient Speakerphone via Twilio Voice API...");
+      addTelemetryLog("Initiating priority voice channel to Solitary Patient ID #AEGIS-9921.");
+    }
+
+    function triggerDispatch108() {
+      const btn = document.getElementById('btnDispatch108');
+      btn.innerHTML = `<span>✓ Paramedics Dispatched (ETA: 6 mins)</span>`;
+      btn.className = "w-full py-2.5 px-3 rounded-xl bg-[#00F5A0] text-black font-extrabold text-xs flex items-center justify-center space-x-2";
+      showToast("Emergency 108 Ambulance Unit Dispatched (#AMB-702)", "emerald");
+      addTelemetryLog("108 Paramedic Dispatch confirmed. GPS packet forwarded to ambulance #AMB-702.");
+    }
+
+    function navigateGps() {
+      window.open('https://www.google.com/maps/dir/?api=1&destination=13.0827,80.2707', '_blank');
+      showToast("Opening GPS Navigation Route...");
+    }
+
+    function copySecureLink() {
+      const text = `https://aegishealth.ai/responder/token?id=AEGIS-9921&ts=${Date.now()}`;
+      navigator.clipboard.writeText(text).then(() => {
+        const btnText = document.getElementById('copyLinkBtnText');
+        btnText.innerText = "✓ Copied Link to Clipboard!";
+        setTimeout(() => { btnText.innerText = "🔗 Copy Encrypted Responder Link"; }, 2500);
+        showToast("Secure Link Copied!");
+      }).catch(() => {
+        showToast("Link: " + text);
+      });
+    }
+
+    function toggleSpecsDrawer() {
+      const content = document.getElementById('specsContent');
+      const chevron = document.getElementById('specsChevron');
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        chevron.innerText = '▲';
+      } else {
+        content.classList.add('hidden');
+        chevron.innerText = '▼';
+      }
+    }
+
+    function toggleSlidersModal() {
+      const modal = document.getElementById('slidersModal');
+      modal.classList.toggle('hidden');
+    }
+
+    function onManualSliderChange() {
+      const bpm = parseInt(document.getElementById('sliderBpm').value);
+      const vm = parseFloat(document.getElementById('sliderVm').value) / 100;
+      const audio = parseInt(document.getElementById('sliderAudio').value);
+      const conf = parseInt(document.getElementById('sliderConf').value);
+
+      document.getElementById('sliderBpmVal').innerText = `${bpm} BPM`;
+      document.getElementById('sliderVmVal').innerText = `${vm.toFixed(2)} g`;
+      document.getElementById('sliderAudioVal').innerText = `${audio} dB`;
+      document.getElementById('sliderConfVal').innerText = `${conf} %`;
+
+      state.targetBpm = bpm;
+      state.motionVm = vm;
+      state.audioDb = audio;
+      state.targetConfidence = conf;
+
+      if (conf >= 82 && !state.emergencyActive) {
+        triggerEmergencyAlert();
+      }
+    }
+
+    function showToast(message, type = 'cyber') {
+      const toast = document.getElementById('toastNotification');
+      const text = document.getElementById('toastMessage');
+      const icon = document.getElementById('toastIcon');
+
+      text.innerText = message;
+      if (type === 'crimson') {
+        toast.className = 'fixed bottom-6 right-6 z-50 glass-card-crimson rounded-xl px-4 py-3 border border-[#FF0055] text-xs text-white shadow-2xl flex items-center space-x-2';
+        icon.innerText = '🚨';
+      } else if (type === 'emerald') {
+        toast.className = 'fixed bottom-6 right-6 z-50 glass-card rounded-xl px-4 py-3 border border-[#00F5A0]/50 text-xs text-white shadow-2xl flex items-center space-x-2';
+        icon.innerText = '✓';
+      } else {
+        toast.className = 'fixed bottom-6 right-6 z-50 glass-card rounded-xl px-4 py-3 border border-[#00F2FE]/50 text-xs text-white shadow-2xl flex items-center space-x-2';
+        icon.innerText = 'ℹ️';
+      }
+
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 3500);
+    }
+
+    function addTelemetryLog(msg) {
+      const box = document.getElementById('telemetryLogBox');
+      if (!box) return;
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      const div = document.createElement('div');
+      div.className = msg.includes('CRITICAL') ? 'text-[#FF0055] font-bold' : msg.includes('CANCEL') ? 'text-[#00F5A0]' : 'text-slate-300';
+      div.innerText = `[${timeStr}] ${msg}`;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function startEngineLoop() {
+      setInterval(() => {
+        state.bpm += (state.targetBpm - state.bpm) * 0.25;
+        state.confidence += (state.targetConfidence - state.confidence) * 0.2;
+
+        let displayBpm = Math.round(state.bpm);
+        if (state.simMode === 'normal') {
+          displayBpm += Math.floor((Math.random() * 3) - 1);
+        }
+
+        document.getElementById('liveBpmDisplay').innerText = displayBpm;
+        document.getElementById('motionVectorDisplay').innerText = state.motionVm.toFixed(2);
+        document.getElementById('acousticDbDisplay').innerText = Math.round(state.audioDb);
+        document.getElementById('confidencePercentage').innerText = `${Math.round(state.confidence)}%`;
+
+        document.getElementById('axisXVal').innerText = `${(state.motionVm * 0.45).toFixed(2)}g`;
+        document.getElementById('axisYVal').innerText = `${(state.motionVm * 0.55).toFixed(2)}g`;
+        document.getElementById('axisZVal').innerText = `${(state.motionVm * 0.70).toFixed(2)}g`;
+        document.getElementById('barAxisX').style.width = `${Math.min(100, (state.motionVm / 2.5) * 80)}%`;
+        document.getElementById('barAxisY').style.width = `${Math.min(100, (state.motionVm / 2.5) * 90)}%`;
+        document.getElementById('barAxisZ').style.width = `${Math.min(100, (state.motionVm / 2.5) * 100)}%`;
+
+        const total = 264;
+        const confOffset = total - ((state.confidence / 100) * total);
+        const radialCircle = document.getElementById('radialGaugeCircle');
+        if (radialCircle) {
+          radialCircle.style.strokeDashoffset = confOffset;
+          if (state.confidence >= 82) {
+            radialCircle.setAttribute('stroke', '#FF0055');
+          } else if (state.confidence >= 50) {
+            radialCircle.setAttribute('stroke', '#F5A623');
+          } else {
+            radialCircle.setAttribute('stroke', '#00F2FE');
+          }
+        }
+
+        const confBar = document.getElementById('confidenceLinearBar');
+        if (confBar) {
+          confBar.style.width = `${Math.min(100, state.confidence)}%`;
+        }
+
+        const anomalyText = document.getElementById('anomalyStateText');
+        if (anomalyText) {
+          if (state.confidence >= 82) {
+            anomalyText.innerText = 'CRITICAL BREACH';
+            anomalyText.className = 'text-[#FF0055] font-extrabold';
+          } else if (state.confidence >= 50) {
+            anomalyText.innerText = 'Elevated Risk';
+            anomalyText.className = 'text-[#F5A623] font-bold';
+          } else {
+            anomalyText.innerText = 'Sub-Threshold Safe';
+            anomalyText.className = 'text-[#00F5A0]';
+          }
+        }
+
+        state.historyData.shift();
+        state.historyData.push(displayBpm);
+        drawDirectPpgCanvas();
+
+        drawSpectrogram();
+
+      }, 300);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      startEngineLoop();
+
+      window.addEventListener('resize', () => {
+        drawDirectPpgCanvas();
+        drawSpectrogram();
+        if (state.view === 'responder') {
+          drawDirectIncidentCanvas();
+          if (leafletMap) leafletMap.invalidateSize();
+        }
+      });
+    });
+  </script>
+
+</body>
+</html>

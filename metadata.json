@@ -1,0 +1,6 @@
+{
+  "name": "AegisHealth",
+  "description": "Software-Driven Silent Seizure & Health Emergency Response Platform for Solitary Patients",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
